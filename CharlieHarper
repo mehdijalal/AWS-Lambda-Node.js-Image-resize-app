@@ -1,0 +1,91 @@
+
+    //const S3 = require("./aws-s3");
+    const AWS = require("aws-sdk");
+    const util = require('util');
+//const Sharp = require("sharp");
+ const sharp = require('/opt/MJSharp/node_modules/sharp');
+ //const sharp = require('/opt/sharp/node_modules/sharp');
+ const s3 = new AWS.S3();
+exports.handler = async (event, context, callback) => {
+    console.log("====***********************************=====================*****************------------");
+    console.log(event.Records[0].s3.bucket.name);
+    
+    // Read options from the event parameter.
+    console.log("Reading options from event:\n", util.inspect(event, {depth: 5}));
+    const srcBucket = event.Records[0].s3.bucket.name;
+    // Object key may have spaces or unicode non-ASCII characters.
+    const srcKey    = decodeURIComponent(event.Records[0].s3.object.key.replace(/\+/g, " "));
+    const dstBucket = srcBucket + "-resized";
+    const dstKey    = "resized-" + srcKey;
+    console.log('---------got here-----------');
+    // Infer the image type from the file suffix.
+    const typeMatch = srcKey.match(/\.([^.]*)$/);
+    if (!typeMatch) {
+        console.log("Could not determine the image type.");
+        return;
+    }
+     console.log('---------got here 2-----------');
+    // Check that the image type is supported  
+    const imageType = typeMatch[1].toLowerCase();
+    if (imageType != "jpg" && imageType != "png") {
+        console.log('-----------got here image type--------------');
+        console.log(`Unsupported image type: ${imageType}`);
+        return;
+    }
+  console.log('---------got here 2 LOOOOLLL-----------');
+    // Download the image from the S3 source bucket. 
+
+    try {
+        console.log('---------got here 3 LOOOOLLL-----------');
+        const params = {
+            Bucket: srcBucket,
+            Key: srcKey
+        };
+         console.log('--------------------------');
+        console.log(params);
+        console.log('--------------------------');
+        var origimage = await s3.getObject(params).promise();
+
+    } catch (error) {
+        console.log('---------Got ERRor here 23 LOOOOLLL-----------');
+        console.log(error);
+        return;
+    }  
+ console.log('---------got here 3-----------');
+    // set thumbnail width. Resize will set the height automatically to maintain aspect ratio.
+    const width  = 200;
+
+    // Use the Sharp module to resize the image and save in a buffer.
+    try { 
+         console.log('---------got here 4-----------');
+        var buffer = await sharp(origimage.Body).resize(width).toBuffer();
+            
+    } catch (error) {
+         console.log('---------Error here-----------');
+        console.log(error);
+        return;
+    } 
+
+    console.log('---------got here 5-----------');
+    // Upload the thumbnail image to the destination bucket
+    try {
+         console.log('---------got here 6-----------');
+         console.log(dstBucket);
+        const destparams = {
+            Bucket: dstBucket,
+            Key: dstKey,
+            Body: buffer,
+            ContentType: "image"
+        };
+
+        const putResult = await s3.putObject(destparams).promise(); 
+        
+    } catch (error) {
+         console.log('---------Error  here 2-----------');
+        console.log(error);
+        return;
+    } 
+     console.log('---------got here 7-----------');
+    console.log('Successfully resized ' + srcBucket + '/' + srcKey +
+        ' and uploaded to ' + dstBucket + '/' + dstKey); 
+};
